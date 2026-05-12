@@ -44,6 +44,20 @@ echo "  [2] 独立Bot模式：Hermes 拥有独立的 Telegram Bot"
 read -p "选择 [1]: " MODE_CHOICE
 MODE_CHOICE=${MODE_CHOICE:-1}
 
+echo ""
+read -p "模型 Provider ID (OpenClaw 使用) [dashscope]: " PROVIDER_ID
+PROVIDER_ID=${PROVIDER_ID:-dashscope}
+
+read -p "模型名称 [qwen3.6-plus]: " MODEL_NAME
+MODEL_NAME=${MODEL_NAME:-qwen3.6-plus}
+
+read -p "API Base URL [https://coding.dashscope.aliyuncs.com/v1]: " MODEL_BASE_URL
+MODEL_BASE_URL=${MODEL_BASE_URL:-https://coding.dashscope.aliyuncs.com/v1}
+
+read -p "Context Window (token) [128000]: " CONTEXT_WINDOW
+CONTEXT_WINDOW=${CONTEXT_WINDOW:-128000}
+
+
 HERMES_BOT_TOKEN=""
 if [ "$MODE_CHOICE" = "2" ]; then
   read -p "Hermes 独立 Telegram Bot Token: " HERMES_BOT_TOKEN
@@ -98,14 +112,14 @@ python3 -c "
 import json
 cfg = {
     \"gateway\": {\"mode\": \"local\", \"bind\": \"lan\"},
-    \"agents\": {\"defaults\": {\"model\": {\"primary\": \"dashscope/qwen3.6-plus\"}}},
+    \"agents\": {\"defaults\": {\"model\": {\"primary\": \"${PROVIDER_ID}/${MODEL_NAME}\"}}},
     \"models\": {
         \"providers\": {
-            \"dashscope\": {
+            \"${PROVIDER_ID}\": {
                 \"baseUrl\": \"https://coding.dashscope.aliyuncs.com/v1\",
                 \"apiKey\": \"${API_KEY}\",
                 \"api\": \"openai-completions\",
-                \"models\": [{\"id\": \"qwen3.6-plus\", \"name\": \"qwen3.6-plus\", \"contextWindow\": 128000, \"maxTokens\": 8192}]
+                \"models\": [{\"id\": \"${MODEL_NAME}\", \"name\": \"${MODEL_NAME}\", \"contextWindow\": ${CONTEXT_WINDOW}, \"maxTokens\": 8192}]
             }
         }
     },
@@ -132,9 +146,9 @@ openclaw doctor --fix || log_warn "doctor 检查有警告，请手动查看"
 # 6. 配置 Hermes
 # ============================================================
 log_info "配置 Hermes Agent..."
-hermes config set model.provider alibaba
-hermes config set model.default qwen3.6-plus
-hermes config set model.base_url https://coding.dashscope.aliyuncs.com/v1
+hermes config set model.provider custom
+hermes config set model.default $MODEL_NAME
+hermes config set model.base_url $MODEL_BASE_URL
 
 # 配置 .env 文件
 if [ "$MODE_CHOICE" = "2" ]; then
