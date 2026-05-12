@@ -2,8 +2,8 @@
 set -e
 
 # ============================================================
-# 双Agent一键安装脚本：OpenClaw + Hermes Agent
-# 适用：Debian 13, root 用户
+# 双Agent本地一键安装脚本：OpenClaw + Hermes Agent
+# 适用：Debian 13, root 用户（直接在目标服务器运行）
 # ============================================================
 
 RED='\033[0;31m'
@@ -24,9 +24,6 @@ echo -e "${BLUE}======================================${NC}"
 echo -e "${BLUE}  双Agent一键部署：OpenClaw + Hermes  ${NC}"
 echo -e "${BLUE}======================================${NC}"
 echo ""
-
-read -p "服务器IP [135.181.81.10]: " SERVER_IP
-SERVER_IP=${SERVER_IP:-135.181.81.10}
 
 read -p "DashScope API Key: " API_KEY
 while [ -z "$API_KEY" ]; do
@@ -57,60 +54,47 @@ if [ "$MODE_CHOICE" = "2" ]; then
 fi
 
 # ============================================================
-# 2. 连接测试
-# ============================================================
-log_info "测试 SSH 连接到 ${SERVER_IP}..."
-if ! ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no root@"${SERVER_IP}" "echo ok" >/dev/null 2>&1; then
-  log_error "SSH 连接失败，请检查："
-  echo "  1. 服务器是否在线"
-  echo "  2. SSH 密码认证是否启用"
-  echo "  3. 运行: ssh-copy-id root@${SERVER_IP}"
-  exit 1
-fi
-log_ok "SSH 连接成功"
-
-# ============================================================
-# 3. 安装 Docker
+# 2. 安装 Docker
 # ============================================================
 log_info "安装 Docker..."
-if ssh root@"${SERVER_IP}" "docker --version" >/dev/null 2>&1; then
+if command -v docker >/dev/null 2>&1; then
   log_ok "Docker 已安装"
 else
-  ssh root@"${SERVER_IP}" "curl -fsSL https://get.docker.com | bash"
-  ssh root@"${SERVER_IP}" "systemctl enable docker && systemctl start docker"
+  curl -fsSL https://get.docker.com | bash
+  systemctl enable docker && systemctl start docker
   log_ok "Docker 安装完成"
 fi
 
 # ============================================================
-# 4. 安装 OpenClaw
+# 3. 安装 OpenClaw
 # ============================================================
 log_info "安装 OpenClaw..."
-if ssh root@"${SERVER_IP}" "command -v openclaw" >/dev/null 2>&1; then
+if command -v openclaw >/dev/null 2>&1; then
   log_ok "OpenClaw 已安装"
-  ssh root@"${SERVER_IP}" "openclaw --version"
+  openclaw --version
 else
-  ssh root@"${SERVER_IP}" "curl -fsSL https://openclaw.ai/install.sh | bash"
+  curl -fsSL https://openclaw.ai/install.sh | bash
   log_ok "OpenClaw 安装完成"
-  ssh root@"${SERVER_IP}" "openclaw --version"
+  openclaw --version
 fi
 
 # ============================================================
-# 5. 安装 Hermes Agent
+# 4. 安装 Hermes Agent
 # ============================================================
 log_info "安装 Hermes Agent..."
-if ssh root@"${SERVER_IP}" "command -v hermes" >/dev/null 2>&1; then
+if command -v hermes >/dev/null 2>&1; then
   log_ok "Hermes 已安装"
-  ssh root@"${SERVER_IP}" "export PATH=/root/.local/bin:\$PATH && hermes --version"
+  hermes --version
 else
-  ssh root@"${SERVER_IP}" "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
   log_ok "Hermes 安装完成"
 fi
 
 # ============================================================
-# 6. 配置 OpenClaw
+# 5. 配置 OpenClaw
 # ============================================================
 log_info "配置 OpenClaw..."
-ssh root@"${SERVER_IP}" 'python3 -c "
+python3 -c "
 import json
 cfg = {
     \"gateway\": {\"mode\": \"local\", \"bind\": \"lan\"},
@@ -119,7 +103,7 @@ cfg = {
         \"providers\": {
             \"dashscope\": {
                 \"baseUrl\": \"https://coding.dashscope.aliyuncs.com/v1\",
-                \"apiKey\": \"'\"${API_KEY}\"'\",
+                \"apiKey\": \"${API_KEY}\",
                 \"api\": \"openai-completions\",
                 \"models\": [{\"id\": \"qwen3.6-plus\", \"name\": \"qwen3.6-plus\", \"contextWindow\": 128000, \"maxTokens\": 8192}]
             }
@@ -128,7 +112,7 @@ cfg = {
     \"channels\": {
         \"telegram\": {
             \"enabled\": true,
-            \"botToken\": \"'\"${OPENCLAW_BOT_TOKEN}\"'\",
+            \"botToken\": \"${OPENCLAW_BOT_TOKEN}\",
             \"dmPolicy\": \"open\",
             \"allowFrom\": [\"*\"]
         }
@@ -136,37 +120,42 @@ cfg = {
 }
 with open(\"/root/.openclaw/openclaw.json\", \"w\") as f:
     json.dump(cfg, f, indent=2)
-"'
+"
 log_ok "OpenClaw 配置完成"
 
 # 运行 doctor 检查
 log_info "运行 openclaw doctor --fix..."
-ssh root@"${SERVER_IP}" "export OPENCLAW_SERVICE_REPAIR_POLICY=external && openclaw doctor --fix" || log_warn "doctor 检查有警告，请手动查看"
+export OPENCLAW_SERVICE_REPAIR_POLICY=external
+openclaw doctor --fix || log_warn "doctor 检查有警告，请手动查看"
 
 # ============================================================
-# 7. 配置 Hermes
+# 6. 配置 Hermes
 # ============================================================
 log_info "配置 Hermes Agent..."
-ssh root@"${SERVER_IP}" "export PATH=/root/.local/bin:\$PATH && hermes config set model.provider alibaba"
-ssh root@"${SERVER_IP}" "export PATH=/root/.local/bin:\$PATH && hermes config set model.default qwen3.6-plus"
-ssh root@"${SERVER_IP}" "export PATH=/root/.local/bin:\$PATH && hermes config set model.base_url https://coding.dashscope.aliyuncs.com/v1"
+hermes config set model.provider alibaba
+hermes config set model.default qwen3.6-plus
+hermes config set model.base_url https://coding.dashscope.aliyuncs.com/v1
 
 # 配置 .env 文件
 if [ "$MODE_CHOICE" = "2" ]; then
   # 模式2：独立Bot
-  ssh root@"${SERVER_IP}" "grep -q 'TELEGRAM_BOT_TOKEN' /root/.hermes/.env 2>/dev/null && sed -i 's/^TELEGRAM_BOT_TOKEN=.*/TELEGRAM_BOT_TOKEN=${HERMES_BOT_TOKEN}/' /root/.hermes/.env || echo 'TELEGRAM_BOT_TOKEN=${HERMES_BOT_TOKEN}' >> /root/.hermes/.env"
+  if grep -q 'TELEGRAM_BOT_TOKEN' /root/.hermes/.env 2>/dev/null; then
+    sed -i "s/^TELEGRAM_BOT_TOKEN=.*/TELEGRAM_BOT_TOKEN=${HERMES_BOT_TOKEN}/" /root/.hermes/.env
+  else
+    echo "TELEGRAM_BOT_TOKEN=${HERMES_BOT_TOKEN}" >> /root/.hermes/.env
+  fi
   log_ok "Hermes 独立Bot模式已配置"
 else
   # 模式1：CLI集成（注释掉Token避免冲突）
-  ssh root@"${SERVER_IP}" "sed -i 's/^TELEGRAM_BOT_TOKEN=/# TELEGRAM_BOT_TOKEN=/' /root/.hermes/.env 2>/dev/null || true"
+  sed -i 's/^TELEGRAM_BOT_TOKEN=/# TELEGRAM_BOT_TOKEN=/' /root/.hermes/.env 2>/dev/null || true
   log_ok "Hermes CLI集成模式已配置"
 fi
 
 # ============================================================
-# 8. 创建 systemd 服务
+# 7. 创建 systemd 服务
 # ============================================================
 log_info "创建 OpenClaw systemd 服务..."
-ssh root@"${SERVER_IP}" "cat > /etc/systemd/system/openclaw.service << 'EOF'
+cat > /etc/systemd/system/openclaw.service << 'EOF'
 [Unit]
 Description=OpenClaw Gateway
 After=network.target
@@ -183,13 +172,13 @@ LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
-EOF"
-ssh root@"${SERVER_IP}" "systemctl daemon-reload && systemctl enable openclaw"
+EOF
+systemctl daemon-reload && systemctl enable openclaw
 log_ok "OpenClaw 服务已创建"
 
 log_info "创建 Hermes systemd 服务..."
-ssh root@"${SERVER_IP}" "mkdir -p /root/.config/systemd/user"
-ssh root@"${SERVER_IP}" "cat > /root/.config/systemd/user/hermes-gateway.service << 'EOF'
+mkdir -p /root/.config/systemd/user
+cat > /root/.config/systemd/user/hermes-gateway.service << 'EOF'
 [Unit]
 Description=Hermes Agent Gateway
 After=network.target
@@ -208,46 +197,45 @@ LimitNOFILE=65536
 
 [Install]
 WantedBy=default.target
-EOF"
-ssh root@"${SERVER_IP}" "systemctl --user daemon-reload && systemctl --user enable hermes-gateway"
-# 确保 linger 启用（用户级服务在SSH断开后继续运行）
-ssh root@"${SERVER_IP}" "loginctl enable-linger root"
+EOF
+systemctl --user daemon-reload && systemctl --user enable hermes-gateway
+loginctl enable-linger root
 log_ok "Hermes 服务已创建"
 
 # ============================================================
-# 9. CLI集成（仅模式1）
+# 8. CLI集成（仅模式1）
 # ============================================================
 if [ "$MODE_CHOICE" = "1" ]; then
   log_info "配置 CLI 集成模式..."
-  ssh root@"${SERVER_IP}" "cat > /usr/local/bin/hermes-task << 'SCRIPT'
+  cat > /usr/local/bin/hermes-task << 'SCRIPT'
 #!/bin/bash
-export PATH=\"/root/.local/bin:/usr/local/bin:\$PATH\"
-exec /usr/local/bin/hermes chat -q \"\$1\" 2>/dev/null
-SCRIPT"
-  ssh root@"${SERVER_IP}" "chmod +x /usr/local/bin/hermes-task"
+export PATH="/root/.local/bin:/usr/local/bin:$PATH"
+exec /usr/local/bin/hermes chat -q "$1" 2>/dev/null
+SCRIPT
+  chmod +x /usr/local/bin/hermes-task
 
-  ssh root@"${SERVER_IP}" "mkdir -p /root/.openclaw/workspace"
-  ssh root@"${SERVER_IP}" "cat > /root/.openclaw/workspace/AGENTS.md << 'MD'
+  mkdir -p /root/.openclaw/workspace
+  cat > /root/.openclaw/workspace/AGENTS.md << 'MD'
 # Integration Guide
 遇到复杂任务（写代码、深度分析、数据处理），通过 shell 调用 Hermes：
-\`\`\`bash
-hermes-task \"详细的任务描述\"
-\`\`\`
+```bash
+hermes-task "详细的任务描述"
+```
 Hermes 有完整的系统访问权限：Python、Node.js、shell、浏览器、文件工具。
-MD"
+MD
   log_ok "CLI集成已配置完成"
 fi
 
 # ============================================================
-# 10. 启动服务
+# 9. 启动服务
 # ============================================================
 log_info "启动服务..."
-ssh root@"${SERVER_IP}" "systemctl restart openclaw"
-ssh root@"${SERVER_IP}" "systemctl --user restart hermes-gateway"
+systemctl restart openclaw || true
+systemctl --user restart hermes-gateway || true
 log_ok "服务已启动"
 
 # ============================================================
-# 11. 验证
+# 10. 验证
 # ============================================================
 echo ""
 echo -e "${BLUE}======================================${NC}"
@@ -259,17 +247,17 @@ echo ""
 sleep 3
 
 log_info "检查 OpenClaw..."
-if ssh root@"${SERVER_IP}" "curl -sf http://127.0.0.1:18789/healthz" >/dev/null 2>&1; then
+if curl -sf http://127.0.0.1:18789/healthz >/dev/null 2>&1; then
   log_ok "OpenClaw 健康检查通过"
 else
-  log_warn "OpenClaw 健康检查未响应，查看日志: ssh root@${SERVER_IP} journalctl -u openclaw -n 20"
+  log_warn "OpenClaw 健康检查未响应，查看日志: journalctl -u openclaw -n 20"
 fi
 
 log_info "检查 Hermes..."
-if ssh root@"${SERVER_IP}" "systemctl --user is-active hermes-gateway" >/dev/null 2>&1; then
+if systemctl --user is-active hermes-gateway >/dev/null 2>&1; then
   log_ok "Hermes 服务运行中"
 else
-  log_warn "Hermes 服务未运行，查看日志: ssh root@${SERVER_IP} journalctl --user -u hermes-gateway -n 20"
+  log_warn "Hermes 服务未运行，查看日志: journalctl --user -u hermes-gateway -n 20"
 fi
 
 echo ""
@@ -277,12 +265,11 @@ echo -e "${GREEN}======================================${NC}"
 echo -e "${GREEN}  部署完成！                        ${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo ""
-echo "服务器: ${SERVER_IP}"
 echo "模式:   $([ "$MODE_CHOICE" = "1" ] && echo "CLI集成模式" || echo "独立Bot模式")"
 echo ""
 echo "常用命令："
-echo "  查看OpenClaw日志:   ssh root@${SERVER_IP} 'journalctl -u openclaw -f'"
-echo "  查看Hermes日志:     ssh root@${SERVER_IP} 'journalctl --user -u hermes-gateway -f'"
-echo "  重启OpenClaw:       ssh root@${SERVER_IP} 'systemctl restart openclaw'"
-echo "  重启Hermes:         ssh root@${SERVER_IP} 'systemctl --user restart hermes-gateway'"
+echo "  查看OpenClaw日志:   journalctl -u openclaw -f"
+echo "  查看Hermes日志:     journalctl --user -u hermes-gateway -f"
+echo "  重启OpenClaw:       systemctl restart openclaw"
+echo "  重启Hermes:         systemctl --user restart hermes-gateway"
 echo ""
