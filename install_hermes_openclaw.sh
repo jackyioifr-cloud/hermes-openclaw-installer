@@ -61,7 +61,10 @@ if ! python3 -c "import venv" &>/dev/null; then
  apt-get install -y -qq python3-venv 2>/dev/null || true
 fi
 
-if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; }; then
+PY_TOO_OLD=0
+if [ "$PY_MAJOR" -lt 3 ]; then PY_TOO_OLD=1; fi
+if [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; then PY_TOO_OLD=1; fi
+if [ "$PY_TOO_OLD" -eq 1 ]; then
  warn "Python ${PY_VER} < 3.11，Hermes 官方安装脚本会通过 uv 自动安装 Python 3.11"
 fi
 info "Python ${PY_VER} ✓"
