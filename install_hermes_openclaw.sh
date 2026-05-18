@@ -42,19 +42,27 @@ info "git ✓"
 
 # Python 版本检查 (Hermes 需要 >=3.11)
 if ! command -v python3 &>/dev/null; then
-    warn "python3 未安装，自动安装中..."
-    apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip
-    if ! command -v python3 &>/dev/null; then
-        error "python3 自动安装失败，请手动安装: apt install -y python3"
-    fi
+ warn "python3 未安装，自动安装中..."
+ apt-get update -qq && apt-get install -y -qq python3
+ if ! command -v python3 &>/dev/null; then
+ error "python3 自动安装失败，请手动安装: apt install -y python3"
+ fi
 fi
 
+# 确保 python3-venv 可用（Debian/Ubuntu 默认不装）
 PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
 PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
-PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
+PY_MINOR=$(echo "$PY_VER" | cut -d. -f2")
+VENV_PKG="python${PY_MAJOR}.${PY_MINOR}-venv"
+
+if ! python3 -c "import venv" &>/dev/null; then
+ warn "python3-venv 未安装，自动安装 ${VENV_PKG}..."
+ apt-get update -qq && apt-get install -y -qq "$VENV_PKG" 2>/dev/null || \
+ apt-get install -y -qq python3-venv 2>/dev/null || true
+fi
 
 if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; }; then
-    warn "Python ${PY_VER} < 3.11，Hermes 官方安装脚本会通过 uv 自动安装 Python 3.11"
+ warn "Python ${PY_VER} < 3.11，Hermes 官方安装脚本会通过 uv 自动安装 Python 3.11"
 fi
 info "Python ${PY_VER} ✓"
 
@@ -89,16 +97,25 @@ OPENCLAW_DIR="/opt/openclaw"
 info "创建独立 venv → ${OPENCLAW_DIR}/venv/"
 mkdir -p "${OPENCLAW_DIR}"
 
+# 优先用 uv（Hermes 安装时已装好），否则用 python3 venv
 if command -v uv &>/dev/null; then
     uv venv "${OPENCLAW_DIR}/venv" --python python3
     uv pip install --python "${OPENCLAW_DIR}/venv/bin/python" openclaw tenacity
-elif command -v python3 &>/dev/null; then
+elif python3 -c "import venv" &>/dev/null; then
     python3 -m venv "${OPENCLAW_DIR}/venv"
-    "${OPENCLAW_DIR}/venv/bin/python" -m ensurepip
     "${OPENCLAW_DIR}/venv/bin/pip" install openclaw tenacity
 else
-    error "没有 uv 或 python3，无法创建 venv"
+    error "没有 uv 或 python3-venv，无法创建 venv"
 fi
+
+# 创建 openclaw wrapper 脚本
+cat > /usr/local/bin/openclaw <<'WRAPPER'
+#!/usr/bin/env bash
+unset PYTHONPATH
+unset PYTHONHOME
+exec "/opt/openclaw/venv/bin/openclaw" "$@"
+WRAPPER
+chmod +x /usr/local/bin/openclaw 2>/dev/null || true
 
 info "OpenClaw Python SDK 安装完成 ✓"
 
