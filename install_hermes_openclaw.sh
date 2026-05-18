@@ -23,22 +23,38 @@ error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 info "检查系统依赖..."
 
 if ! command -v curl &>/dev/null; then
-    error "需要 curl，请先安装: apt install -y curl"
+    warn "curl 未安装，自动安装中..."
+    apt-get update -qq && apt-get install -y -qq curl
+    if ! command -v curl &>/dev/null; then
+        error "curl 自动安装失败，请手动安装: apt install -y curl"
+    fi
 fi
 info "curl ✓"
 
 if ! command -v git &>/dev/null; then
-    error "需要 git，请先安装: apt install -y git"
+    warn "git 未安装，自动安装中..."
+    apt-get update -qq && apt-get install -y -qq git
+    if ! command -v git &>/dev/null; then
+        error "git 自动安装失败，请手动安装: apt install -y git"
+    fi
 fi
 info "git ✓"
 
 # Python 版本检查 (Hermes 需要 >=3.11)
+if ! command -v python3 &>/dev/null; then
+    warn "python3 未安装，自动安装中..."
+    apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip
+    if ! command -v python3 &>/dev/null; then
+        error "python3 自动安装失败，请手动安装: apt install -y python3"
+    fi
+fi
+
 PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
 PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
 PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
 
 if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; }; then
-    error "需要 Python >= 3.11，当前: ${PY_VER}"
+    warn "Python ${PY_VER} < 3.11，Hermes 官方安装脚本会通过 uv 自动安装 Python 3.11"
 fi
 info "Python ${PY_VER} ✓"
 
