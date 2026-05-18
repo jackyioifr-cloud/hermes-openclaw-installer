@@ -12,7 +12,6 @@ set -euo pipefail
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
 NC='\033[0m'
 
 info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -50,9 +49,12 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 # 确保 python3-venv 可用（Debian/Ubuntu 默认不装）
-PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+PY_VER=$(python3 -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))' 2>/dev/null || echo "0.0")
 PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
-PY_MINOR=$(echo "$PY_VER" | cut -d. -f2")
+PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
+# 防止空值导致整数比较报错
+PY_MAJOR=${PY_MAJOR:-0}
+PY_MINOR=${PY_MINOR:-0}
 VENV_PKG="python${PY_MAJOR}.${PY_MINOR}-venv"
 
 if ! python3 -c "import venv" &>/dev/null; then
@@ -76,7 +78,9 @@ info "=========================================="
 info "使用官方安装脚本，默认路径: /usr/local/lib/hermes-agent"
 info "安装到: ${HERMES_INSTALL_DIR:-/usr/local/lib/hermes-agent}"
 
-curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup --skip-browser
+if ! curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup --skip-browser; then
+  warn "Hermes Agent 安装脚本返回非零退出码，继续执行..."
+fi
 
 info "Hermes Agent 安装完成 ✓"
 
@@ -86,7 +90,9 @@ info "安装 OpenClaw CLI - cmdok"
 info "=========================================="
 info "使用官方安装脚本，默认路径: /usr/local/bin/cmdok"
 
-curl -fsSL https://cmdop.com/install-cli.sh | bash
+if ! curl -fsSL https://cmdop.com/install-cli.sh | bash; then
+  warn "OpenClaw CLI 安装脚本返回非零退出码，继续执行..."
+fi
 
 info "OpenClaw 安装完成 ✓"
 
@@ -112,11 +118,17 @@ else
 fi
 
 # 创建 openclaw wrapper 脚本
-cat > /usr/local/bin/openclaw <<'WRAPPER'
+# 先确认 pip 安装后的 entrypoint 路径
+OC_ENTRY="/opt/openclaw/venv/bin/openclaw"
+if [ ! -x "$OC_ENTRY" ]; then
+  # 尝试查找实际的 entrypoint
+  OC_ENTRY=$(find /opt/openclaw/venv/bin/ -name 'openclaw*' -type f 2>/dev/null | head -1)
+fi
+cat > /usr/local/bin/openclaw <<WRAPPER
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
-exec "/opt/openclaw/venv/bin/openclaw" "$@"
+exec "${OC_ENTRY:-/opt/openclaw/venv/bin/openclaw}" "\$@"
 WRAPPER
 chmod +x /usr/local/bin/openclaw 2>/dev/null || true
 
