@@ -73,7 +73,7 @@ info "Python ${PY_VER} ✓"
 info "=========================================="
 info "安装 Hermes Agent"
 info "=========================================="
-info "使用官方安装脚本 (默认路径: root → /usr/local/lib/hermes-agent)"
+info "使用官方安装脚本，默认路径: /usr/local/lib/hermes-agent"
 info "安装到: ${HERMES_INSTALL_DIR:-/usr/local/lib/hermes-agent}"
 
 curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup --skip-browser
@@ -82,9 +82,9 @@ info "Hermes Agent 安装完成 ✓"
 
 # ── 安装 OpenClaw ──
 info "=========================================="
-info "安装 OpenClaw (cmdok CLI)"
+info "安装 OpenClaw CLI - cmdok"
 info "=========================================="
-info "使用官方安装脚本 (默认路径: /usr/local/bin/cmdok)"
+info "使用官方安装脚本，默认路径: /usr/local/bin/cmdok"
 
 curl -fsSL https://cmdop.com/install-cli.sh | bash
 
@@ -150,7 +150,7 @@ fi
 OPENCLAW_PY_OK="✗"
 if "${OPENCLAW_DIR}/venv/bin/python" -c "import cmdop; print('cmdop OK')" 2>/dev/null; then
     OPENCLAW_PY_OK="✓"
-    info "OpenClaw Python SDK (cmdop): import 验证 ✓"
+    info "OpenClaw Python SDK - cmdop: import 验证 ✓"
 else
     warn "OpenClaw Python SDK import 失败"
 fi
